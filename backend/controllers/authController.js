@@ -1,6 +1,8 @@
 import TFUser from "../models/users.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import redis from "../redis/client.js";
+import { getActiveUsersFromRedis } from "../redis/redisFunc.js";
 
 export const login= async (req, res) => {
     const { username, password } = req.body;
@@ -13,6 +15,11 @@ export const login= async (req, res) => {
     try {
         // Here you would typically check the database for the user
         const user = await TFUser.findOne({$or:[{email:username},{username}]})
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found"
+            });
+        }
         if(user){
             // Check if the password matches
             const isMatch = await bcrypt.compare(password, user.password);
@@ -23,7 +30,7 @@ export const login= async (req, res) => {
             // Create a token (for demonstration purposes, we'll use a simple JWT)
             const token = jwt.sign({ id: _id, username }, process.env.JWT_SECRET, { expiresIn: '1h' });
             console.log('Login successful:', { user: {username, fullName, email, phone, _id }, token });
-            res.status(200).cookie('ACCESS_TOKEN',token,{httpOnly:true,secure:true}).json({
+            return res.status(200).cookie('ACCESS_TOKEN',token,{httpOnly:true,secure:true}).json({
                 message: 'Login successful',
                 user: {username, fullName, email, phone, _id },
                 token
@@ -33,7 +40,7 @@ export const login= async (req, res) => {
 
         // Set session or token (this is just a placeholder)
 
-        return res.status(200).json({ message: 'Login successful', user });
+        
     } catch (error) {
         console.error('Login error:', error);
         return res.status(500).json({ message: 'Internal server error' });
@@ -76,6 +83,10 @@ export const signup = async (req, res) => {
 export const getAllUsers = async (req, res) => {
     try {
         // Fetch all users from the database
+        const cachedSessions=await getActiveUsersFromRedis();
+        if(cachedSessions){
+            console.log('List of all active users',cachedSessions);
+        }
         const {username}=req.body
         const users = await TFUser.find({username: { $ne: username }}, 'username fullName email phone createdAt status lastSeen');
         console.log('Fetched users:', users);

@@ -6,6 +6,10 @@ import SingleMsg from "../models/singlemsg.js";
 import TFUser from "../models/users.js";
 import DarkMsg from "../models/darkmsg.js";
 import { encrypt } from "../utils/encrypt.js";
+import redis from '../redis/client.js';
+import {getActiveUsersFromRedis,setActiveUsersInRedis} from '../redis/redisFunc.js'
+
+import {getRateOfMessageOfUserFromRedis,setRateOfMessageOfUserInRedis} from '../redis/redisFunc.js'
 
 function socketHandler(io) {
   io.on('connection', (socket) => {
@@ -15,6 +19,7 @@ function socketHandler(io) {
     socket.on('register',async (username) => {
       userSocketMap.set(username, socket.id);
       await TFUser.findOneAndUpdate({username},{status:"online"})
+      await setActiveUsersInRedis(username, true);
       console.log(`User ${username} logged in with socket ID: ${socket.id} on chat`);
     });
     socket.on('registerGroupUser',async (username) => {
@@ -53,6 +58,13 @@ function socketHandler(io) {
     })
     socket.on('newMessageSent', async (data) => {
       const { sender, receiver, message } = data;
+
+      const countOfMessage=await getRateOfMessageOfUserFromRedis(sender);
+      if(countOfMessage && countOfMessage>=3){
+          console.log(`User ${sender} has exceeded the message rate limit.`);
+          return;
+      }
+      setRateOfMessageOfUserInRedis(sender);
       // encrypt the message
       const encryptedMsg=encrypt(message);
       console.log(`New message from ${sender} to ${receiver}: ${encryptedMsg}`);
@@ -123,6 +135,7 @@ function socketHandler(io) {
       for (const [userId, id] of userSocketMap.entries()) {
         if (id === socket.id) {
           await TFUser.findOneAndUpdate({username:userId},{status:"offline",lastSeen:Date.now()})
+          await setActiveUsersInRedis(userId, false);
           userSocketMap.delete(userId);
           groupSocketMap.delete(userId);
           darkSocketMap.delete(userId);

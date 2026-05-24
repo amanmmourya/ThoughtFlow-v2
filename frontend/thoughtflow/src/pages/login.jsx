@@ -36,6 +36,7 @@ const Login = () => {
         }, 2000);
         if(response.ok) {
             const data = await response.json();
+    
             console.log('Login successful:', data);
             localStorage.setItem('user', JSON.stringify(data.user)); // Store user data in local storage
             toast.success('Login successful!');

@@ -1,6 +1,7 @@
 import SingleMsg from '../models/singlemsg.js';
 import TFUser from '../models/users.js';
 import { encrypt, decrypt } from '../utils/encrypt.js';
+import { setRecentChatsFromRedis, getRecentChatsFromRedis } from '../redis/redisFunc.js';
 
 export const getMessages = async (req, res) => {
     const { sender, receiver } = req.body;
@@ -50,7 +51,13 @@ export const getRecentChats = async (req, res) => {
 
     try {
         // Fetch recent chats from the database
-        console.log('Fetching recent chats for user:', userId);
+
+        const cachedRecentChats = await getRecentChatsFromRedis(userId);
+        if (cachedRecentChats) {
+            console.log('Recent chats found in Redis cache for user:', userId);
+            return res.status(200).json(JSON.parse(cachedRecentChats));
+        }
+
         const user = await TFUser.findOne({ username: userId })
             .populate('recentChats.recentUser', 'username fullName _id') // only necessary fields
             .select('recentChats');
@@ -63,6 +70,8 @@ export const getRecentChats = async (req, res) => {
             title:chat.recentUser.fullName||chat.recentUser.username,
             lastMessage: decrypt({ iv: chat.lastIv, content: chat.lastMessage })
         }));
+
+        await setRecentChatsFromRedis(userId, decryptedRecentChats);
         console.log('Fetched recent chats:', decryptedRecentChats);
 
         return res.status(200).json(decryptedRecentChats || []);

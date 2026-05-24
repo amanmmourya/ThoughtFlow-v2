@@ -41,6 +41,7 @@ const UserSearchPage = () => {
     }
     fetchUsers();
     }catch (error) {
+        console.log('Error fetching users:', error);
         console.error('Error fetching users:', error);
         setAllUsers([]); // Set to empty array on error
     }
